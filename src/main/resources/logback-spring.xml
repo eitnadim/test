@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+	<appender name="STDOUT"
+		class="ch.qos.logback.core.ConsoleAppender">
+		<encoder>
+			<pattern>
+				%d{dd-MM-yyyy HH:mm:ss.SSS} [%thread] %-5level
+				%logger{36}.%M - %msg%n
+			</pattern>
+		</encoder>
+	</appender>
+
+
+	
+	<appender name="SAVETOFILE"
+		class="ch.qos.logback.core.rolling.RollingFileAppender">
+
+		<file>/home/ubuntu/logs/current/CurrentAdmin.log</file>
+		<!--<file>D:/logs/current/CurrentAdmin.log</file> -->
+
+		<encoder
+			class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+			<Pattern>
+				%d{dd-MM-yyyy HH:mm:ss.SSS} [%thread] %-5level
+				%logger{36}.%M - %msg%n
+			</Pattern>
+		</encoder>
+
+		<rollingPolicy
+			class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+			<fileNamePattern>/home/ubuntu/logs/history/Admin/Adminlog_%d{dd-MM-yyyy}_%i.gz
+			</fileNamePattern>
+			<!-- <fileNamePattern>D:/logs/history/Admin/Adminlog_%d{dd-MM-yyyy_HH}_%i.log 
+				</fileNamePattern> -->
+			<maxFileSize>900MB</maxFileSize>
+		</rollingPolicy>
+	</appender>
+
+	<root level="error">
+		<appender-ref ref="STDOUT" />
+		<appender-ref ref="SAVETOFILE" />
+	</root>
+
+<logger name="org.springframework" level="info"
+	additivity="false">
+	<appender-ref ref="STDOUT" />
+	<appender-ref ref="SAVETOFILE" />
+</logger>
+
+	<logger name="org.springframework.transaction" level="debug">
+		<appender-ref ref="STDOUT" />
+		<appender-ref ref="SAVETOFILE" />
+	</logger>
+	
+	<logger name="org.springframework.cglib" level="debug" >
+    	<appender-ref ref="STDOUT" />
+		<appender-ref ref="SAVETOFILE" />
+	</logger>
+	
+</configuration>

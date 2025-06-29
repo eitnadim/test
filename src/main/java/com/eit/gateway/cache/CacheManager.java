@@ -56,9 +56,9 @@ public class CacheManager {
 
 		LOGGER.info("Loading IMEI numbers....");
 		
-		CacheManager.imeiNumbers.addAll(customService.getAllActiveIMEINumbers());
+		CacheManager.getImeiNumbers().addAll(customService.getAllActiveIMEINumbers());
 		
-		LOGGER.info("Total IMEI numbers loaded in Cache:"+ CacheManager.imeiNumbers.size());
+		LOGGER.info("Total IMEI numbers loaded in Cache:"+ CacheManager.getImeiNumbers().size());
 	}
 	
 	public void loadApplicationSettings() {
@@ -84,7 +84,7 @@ public class CacheManager {
 	}
 
 	public static boolean isImeiNoExist(String imeiNo) {
-		return CacheManager.imeiNumbers.contains(imeiNo);
+		return CacheManager.getImeiNumbers().contains(imeiNo);
 	}
 	
 	public static String getPreference(String key, String compId) {
@@ -129,5 +129,13 @@ public class CacheManager {
 		loadApplicationSettings();
 		loadCompanySettings();
 		loadActiveIMEINumbers();
+	}
+
+	public static Set<String> getImeiNumbers() {
+		return imeiNumbers;
+	}
+
+	public static void setImeiNumbers(Set<String> imeiNumbers) {
+		CacheManager.imeiNumbers = imeiNumbers;
 	}
 }

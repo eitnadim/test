@@ -1,68 +1,35 @@
-package com.eit.gateway.device.common;
+package com.eit.gateway.device.teltonika;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.math.BigInteger;
 import java.text.DecimalFormat;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.eit.gateway.cache.CacheManager;
-import com.eit.gateway.device.teltonika.AvlData;
-import com.eit.gateway.device.teltonika.IOElement;
-import com.eit.gateway.device.teltonika.LongIOElement;
 import com.eit.gateway.entity.CompanyTrackDevice;
 import com.eit.gateway.entity.Vehicle;
 import com.eit.gateway.entity.VehicleEvent;
 import com.eit.gateway.util.TimeZoneUtil;
 
 @Service
-public class DeviceLogicHandler implements DeviceLogicHandlerBO {
+public class TeltonikaEventBuilder {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(DeviceLogicHandler.class);
-
-	@Autowired
-	private CommonDeviceParser commonDeviceParser;
-
-	private static final String DATE_DDHHMMSS = "yyyy-MM-dd HH:mm:ss";
-
-	SimpleDateFormat sdfTime = new SimpleDateFormat(DATE_DDHHMMSS);
-	SimpleDateFormat sdfDate = new SimpleDateFormat("yyyy-MM-dd");
-
-	private static final String STR_FMECO3 = "FMEco3";
-	private static final String STR_PRO3 = "FMPro3";
-	private static final String STR_TMT250 = "TMT250";
-	private static final String VERSION_ONE = "V1";
-	private static final String totalOdometer = "TotalOdometer";
-	private static final String FMC130 = "FMC130";
-	private static final String FMB120 = "FMB120";
-	private static final String FMC640 = "FMC640";
-	private static final String FMM130 = "FMM130";
-	private static final String FMB920 = "FMB920";
-	private static final String FM2200 = "FM2200";
-	private static final String FMC920 = "FMC920";
-
-	private static final String region = "Asia/Riyadh";
-
-	protected static final Map<String, VehicleEvent> prevvehicleEventMap = new HashMap<>();
-
-	protected static final Map<String, Long> preOdometerMap = new HashMap<>();
-
-	protected static final Map<String, String> preLatLangOdometerMap = new HashMap<>();
-
-	private static final DecimalFormat decimalFormat = new DecimalFormat("#.##");
+	private static final Logger LOGGER = LoggerFactory.getLogger(TeltonikaEventBuilder.class);
 
 	private static Vehicle vehicle = null;
 	private static VehicleEvent vehicleEvent = null;
@@ -71,8 +38,27 @@ public class DeviceLogicHandler implements DeviceLogicHandlerBO {
 	private static String[] reverseSetting;
 	private static JSONObject sensorsValue = new JSONObject();
 
+	protected static final Map<String, Long> preOdometerMap = new HashMap<>();
+
+	protected static final Map<String, String> preLatLangOdometerMap = new HashMap<>();
+
+	private static final DecimalFormat decimalFormat = new DecimalFormat("#.##");
+
 	private static final String TEMPERATURE_SENSORS_KEY = "temperatureSensors";
 	private static final String BLUETOOTH_SENSOR_KEY = "bluetoothSensor";
+
+//	private static final String STR_FMECO3 = "FMEco3";
+//	private static final String STR_PRO3 = "FMPro3";
+	private static final String STR_TMT250 = "TMT250";
+	private static final String VERSION_ONE = "V1";
+	private static final String totalOdometer = "TotalOdometer";
+	private static final String FMC130 = "FMC130";
+	private static final String FMB120 = "FMB120";
+	private static final String FMC640 = "FMC640";
+//	private static final String FMM130 = "FMM130";
+//	private static final String FMB920 = "FMB920";
+//	private static final String FM2200 = "FM2200";
+	private static final String FMC920 = "FMC920";
 
 	private static final String DEVICE_DIGITAL_KEY = "deviceDigitalInputAndOuput";
 	private static final String DEVICE_ANALOG_KEY = "deviceAnalogInput";
@@ -82,7 +68,7 @@ public class DeviceLogicHandler implements DeviceLogicHandlerBO {
 
 	private static List<Map<String, JSONObject>> deviceDigitals = new ArrayList<>();
 
-	private static List<Map<String, JSONObject>> deviceAnalogs = new ArrayList<>();
+//	private static List<Map<String, JSONObject>> deviceAnalogs = new ArrayList<>();
 
 	private static JSONObject vehicleDataJson = new JSONObject();
 
@@ -92,52 +78,93 @@ public class DeviceLogicHandler implements DeviceLogicHandlerBO {
 	String[] vehModel = { "0" };
 	Date threeMonthsAgo = null;
 
-	@Override
-	public VehicleEvent prepareVehicleEvents(Vehicle vehicleRec, AvlData[] avlDataArrays, long byteTrx,
+	private static final String region = "Asia/Riyadh";
+
+	public void initialize(Vehicle vehicleRec, AvlData avlDataRec, CompanyTrackDevice companyTrackDeviceRec) {
+		// Initialize any required resources or configurations here
+		LOGGER.info("TeltonikaEventBuilder initialized.");
+		this.vehicle = vehicleRec;
+		this.avlData = avlDataRec;
+		this.deviceModel = companyTrackDeviceRec.getModel();
+	}
+
+	public VehicleEvent prepareVehicleEvents(AvlData avlDataRec, Vehicle vehicleRec, long byteTrx,
 			CompanyTrackDevice companyTrackDeviceRec) {
 
-		try {
-			LOGGER.info("NUkkk check {}", companyTrackDeviceRec);
-			vehicle = vehicleRec;
+		// Null safety checks
+		if (avlDataRec == null || vehicleRec == null) {
+			LOGGER.warn("Null data provided - avlData: {}, vehicle: {}", avlDataRec, vehicleRec);
+			return null;
+		}
+		initialize(vehicleRec, avlDataRec, companyTrackDeviceRec);
+		 vehicleEvent = new VehicleEvent();
 
-//			companyTrackDevice = companyTrackDeviceRec;
+		// Simplified timestamp conversion - truncate to seconds
+		long timeInSeconds = (avlDataRec.getTimestamp() / 1000) * 1000;
+		LOGGER.debug("Time in seconds: {}", timeInSeconds);
 
-			deviceModel = companyTrackDeviceRec.getModel();
+		Date eventDate = TimeZoneUtil.getDateTimeZone(new Date(timeInSeconds), region);
+		Date currentDate = TimeZoneUtil.getDateTimeZone(new Date(), region);
 
-			avlData = avlDataArrays[0];
+		vehicleEvent.setEventTimestamp(eventDate);
+		vehicleEvent.setServerTimestamp(currentDate);
 
-			// Process each AvlData record
-			return processAvlDataRecords(byteTrx);
+		// Check if this is new data to prevent duplicates
+		boolean isNewData = isNewEventData(vehicleRec, eventDate);
+		LOGGER.debug("Timestamp: {} is new: {}, VIN: {}", eventDate, isNewData, vehicleRec.getVin());
 
-		} catch (Exception e) {
-			LOGGER.error("TeltonikaDeviceProtocolHandler: PreparevehicleEvents: General error", e);
+		if (vehicleRec.getVEventTimestamp() != null) {
+			LOGGER.debug("Previous event timestamp: {}, VIN: {}", vehicleRec.getVEventTimestamp(), vehicleRec.getVin());
+		}
+
+		if (!isNewData) {
+			LOGGER.debug("Skipping duplicate event for VIN: {}", vehicleRec.getVin());
 			return null;
 		}
 
+		// Set vehicle event properties
+		setVehicleEventProperties(vehicleEvent, avlDataRec, vehicleRec, byteTrx);
+
+		// Process additional AVL data records
+		processAvlDataRecords();
+
+		return vehicleEvent;
 	}
 
-	// Process all AVL data records
-	private VehicleEvent processAvlDataRecords(long byteTrx) {
+	private boolean isNewEventData(Vehicle vehicle, Date eventDate) {
+		return vehicle.getVEventTimestamp() == null || eventDate.after(vehicle.getVEventTimestamp());
+	}
+
+	private void setVehicleEventProperties(VehicleEvent vehicleEvent, AvlData avlDataRec, Vehicle vehicleRec,
+			long byteTrx) {
+
+		if (avlDataRec.getGpsElement() != null) {
+			vehicleEvent.setSpeed((int) avlDataRec.getGpsElement().getSpeed());
+		}
+
+		vehicleEvent.setVin(vehicleRec.getVin());
+		vehicleEvent.setBytesTrx(byteTrx);
+		vehicleEvent.setEventSource(avlDataRec.getTriggeredPropertyId());
+		vehicleEvent.setPriority((int) avlDataRec.getPriority());
+	}
+
+	private VehicleEvent processAvlDataRecords() {
 
 		reverseSetting = parseReverseSetting(vehicle);
 
 		try {
 			// Create and populate vehicle event
-			vehicleEvent = commonDeviceParser.createVehicleEvent(avlData, vehicle, byteTrx, region, deviceModel);
-			if (vehicleEvent == null) {
-				return vehicleEvent;
-			}
+
 			processCoordinates();
 
 			// Process IO elements for the vehicle event
 			processIOElements();
 
 			processIODetailsForSensors();
-			
+
 			vehicleEvent.setTags(sensorsValue.toString());
-			
-			
-			prevvehicleEventMap.put(vehicleEvent.getVin(), vehicleEvent);
+
+//			prevvehicleEventMap.put(vehicleEvent.getVin(), vehicleEvent);
 
 		} catch (Exception e) {
 			LOGGER.error("TeltonikaDeviceProtocolHandler: Error processing AVL data record", e);
@@ -146,8 +173,7 @@ public class DeviceLogicHandler implements DeviceLogicHandlerBO {
 		return vehicleEvent;
 	}
 
-
-	public void processCoordinates() {
+	private void processCoordinates() {
 		try {
 
 			Double longitude = Double.valueOf("99.999999");
@@ -191,123 +217,125 @@ public class DeviceLogicHandler implements DeviceLogicHandlerBO {
 
 	// Process IO elements from AVL data
 	private void processIOElements() {
+		StringBuilder ioProperty = new StringBuilder();
 		IOElement ioElement = avlData.getInputOutputElement();
-		StringBuilder ioProperty = new StringBuilder("");
 
 		if (ioElement instanceof LongIOElement) {
-			LongIOElement longIOElement = (LongIOElement) ioElement;
-			int[] propertyIDs = longIOElement.getAvailableLongProperties();
+			processLongIO((LongIOElement) ioElement, ioProperty);
+		}
 
-			if (propertyIDs.length > 0) {
-				// Process first property
-				ioProperty.append(propertyIDs[0]).append("=").append(longIOElement.getLongProperty(propertyIDs[0])[1]);
+		vehicleEvent.setIoEvent(ioProperty.toString());
+	}
 
-				// Process remaining properties
-				for (int index = 1; index < propertyIDs.length; index++) {
-					int propertyID = propertyIDs[index];
-					processIOProperty(propertyID, longIOElement, ioProperty);
-				}
+	private void processLongIO(LongIOElement longIO, StringBuilder ioProperty) {
+		int[] propertyIDs = longIO.getAvailableLongProperties();
+		Arrays.sort(propertyIDs);
+
+		for (int propertyID : propertyIDs) {
+			switch (propertyID) {
+			case 132:
+				processSecurityState(propertyID, longIO, ioProperty);
+				break;
+			case 67:
+				processBatteryLevel(propertyID, longIO, ioProperty);
+				break;
+			case 109:
+				processRFID(propertyID, longIO);
+				break;
+			default:
+				append(ioProperty, propertyID + "=" + longIO.getLongProperty(propertyID)[1]);
 			}
-
-		}
-		String iodatas = ioProperty.toString();
-		vehicleEvent.setIoEvent(iodatas);
-
-	}
-
-	private void processIOProperty(int propertyID, LongIOElement longIOElement, StringBuilder ioProperty) {
-		switch (propertyID) {
-		case 132:
-			processSecurityState(propertyID, longIOElement, ioProperty);
-			break;
-		case 67:
-			processBatteryStatus(propertyID, longIOElement, ioProperty);
-			break;
-		case 109:
-			processRFIDForWMS(propertyID, longIOElement);
-			break;
-		default:
-// Default handling for other property IDs
-			ioProperty.append(",").append(propertyID).append("=").append(longIOElement.getLongProperty(propertyID)[1]);
-			break;
 		}
 	}
 
-//Process security state (property ID 132)
-	private void processSecurityState(int propertyID, LongIOElement longIOElement, StringBuilder ioProperty) {
+	private void append(StringBuilder sb, String data) {
+		if (sb.length() > 0)
+			sb.append(",");
+		sb.append(data);
+	}
+
+	private void processSecurityState(int propertyID, LongIOElement longIO, StringBuilder ioProperty) {
 		try {
-			String hexValue = hexStringToASCIIString(String.valueOf(longIOElement.getLongProperty(propertyID)[1]));
+			String hexValue = hexStringToASCIIString(String.valueOf(longIO.getLongProperty(propertyID)[1]));
 			DataInputStream in = new DataInputStream(new ByteArrayInputStream(hexValue.getBytes()));
 			in.readByte();
 
-			StringBuilder securityState = new StringBuilder();
+			StringBuilder state = new StringBuilder();
 
-// Process first flag byte
 			int flag1 = in.readByte();
-			securityState.append("keyIgnition:").append((flag1 & 0x01) == 0 ? "0" : "1").append(";ignition:")
-					.append((flag1 & 0x02) == 0 ? "0" : "1").append(";ignitionOn:")
-					.append((flag1 & 0x04) == 0 ? "0" : "1").append(";webasto:")
-					.append((flag1 & 0x08) == 0 ? "0" : "1");
+			state.append("keyIgnition:").append((flag1 & 0x01) != 0 ? "1" : "0").append(";ignition:")
+					.append((flag1 & 0x02) != 0 ? "1" : "0").append(";ignitionOn:")
+					.append((flag1 & 0x04) != 0 ? "1" : "0").append(";webasto:")
+					.append((flag1 & 0x08) != 0 ? "1" : "0");
 
-// Process second flag byte
 			int flag2 = in.readByte();
-			securityState.append("parking:").append((flag2 & 0x01) == 0 ? "0" : "1").append(";handBreak:")
-					.append((flag2 & 0x10) == 0 ? "0" : "1").append(";footBreak:")
-					.append((flag2 & 0x20) == 0 ? "0" : "1").append(";engineWorking:")
-					.append((flag2 & 0x40) == 0 ? "0" : "1").append(";reverse:")
-					.append((flag2 & 0x80) == 0 ? "0" : "1");
+			state.append(";parking:").append((flag2 & 0x01) != 0 ? "1" : "0").append(";handBreak:")
+					.append((flag2 & 0x10) != 0 ? "1" : "0").append(";footBreak:")
+					.append((flag2 & 0x20) != 0 ? "1" : "0").append(";engineWorking:")
+					.append((flag2 & 0x40) != 0 ? "1" : "0").append(";reverse:")
+					.append((flag2 & 0x80) != 0 ? "1" : "0");
 
-// Process third flag byte
 			int flag3 = in.readByte();
-			securityState.append("frontLeftDoor:").append((flag3 & 0x01) == 0 ? "0" : "1").append(";frontLRightDoor:")
-					.append((flag3 & 0x02) == 0 ? "0" : "1").append(";rearLeftDoor:")
-					.append((flag3 & 0x04) == 0 ? "0" : "1").append(";rearRightDoor:")
-					.append((flag3 & 0x08) == 0 ? "0" : "1").append(";engineCover:")
-					.append((flag3 & 0x10) == 0 ? "0" : "1").append(";trunkCover:")
-					.append((flag3 & 0x20) == 0 ? "0" : "1");
+			state.append(";frontLeftDoor:").append((flag3 & 0x01) != 0 ? "1" : "0").append(";frontRightDoor:")
+					.append((flag3 & 0x02) != 0 ? "1" : "0").append(";rearLeftDoor:")
+					.append((flag3 & 0x04) != 0 ? "1" : "0").append(";rearRightDoor:")
+					.append((flag3 & 0x08) != 0 ? "1" : "0").append(";engineCover:")
+					.append((flag3 & 0x10) != 0 ? "1" : "0").append(";trunkCover:")
+					.append((flag3 & 0x20) != 0 ? "1" : "0");
 
-			ioProperty.append(",").append(propertyID).append("=").append(securityState.toString());
+			append(ioProperty, propertyID + "=" + state);
 		} catch (Exception e) {
-			LOGGER.error("Error processing security state", e);
+			// handle error safely
 		}
 	}
 
-//Process battery status (property ID 67)
-	private void processBatteryStatus(int propertyID, LongIOElement longIOElement, StringBuilder ioProperty) {
-		long batteryValue = longIOElement.getLongProperty(propertyID)[1];
-		ioProperty.append(",").append(propertyID).append("=").append(batteryValue);
+	private void processBatteryLevel(int propertyID, LongIOElement longIO, StringBuilder ioProperty) {
+		long value = longIO.getLongProperty(propertyID)[1];
+		append(ioProperty, propertyID + "=" + value);
 
-// Process battery status for specific device models
-		if (deviceModel.equalsIgnoreCase(FMC640) || deviceModel.equalsIgnoreCase(FMB120)
-				|| deviceModel.equalsIgnoreCase(FMC130) || deviceModel.equalsIgnoreCase(FMC920)) {
+		if (deviceModel.equalsIgnoreCase("FMC640") || deviceModel.equalsIgnoreCase("FMB120")
+				|| deviceModel.equalsIgnoreCase("FMC130") || deviceModel.equalsIgnoreCase("FMC920")) {
 
-			if (batteryValue < 8231 && batteryValue > 8199)
-				ioProperty.append(",").append("600=LowBattery1");
-			else if (batteryValue < 8200 && batteryValue > 7899)
-				ioProperty.append(",").append("600=LowBattery2");
-			else if (batteryValue < 7900)
-				ioProperty.append(",").append("600=LowBattery3");
-			else if (batteryValue > 8230)
-				ioProperty.append(",").append("600=Normal");
-		}
-	}
-
-//Process RFID for WMS (property ID 109)
-	private void processRFIDForWMS(int propertyID, LongIOElement longIOElement) {
-		try {
-			String hex = longIOElement.getBigIntProperty(propertyID)[1].toString(16);
-			StringBuilder ascii = new StringBuilder();
-
-			for (int j = 0; j < hex.length(); j += 2) {
-				String hexPair = hex.substring(j, j + 2);
-				int decimal = Integer.parseInt(hexPair, 16);
-				ascii.append((char) decimal);
+			if (value < 7900) {
+				append(ioProperty, "600=LowBattery3");
+			} else if (value < 8200) {
+				append(ioProperty, "600=LowBattery2");
+			} else if (value < 8231) {
+				append(ioProperty, "600=LowBattery1");
+			} else {
+				append(ioProperty, "600=Normal");
 			}
-
-			sensorsValue.put("rfidForWMS", ascii.toString());
-		} catch (Exception e) {
-			LOGGER.error("Error processing RFID for WMS", e);
 		}
+	}
+
+	private void processRFID(int propertyID, LongIOElement longIO) {
+		BigInteger hex = longIO.getBigIntProperty(propertyID)[1];
+
+		// Convert BigInteger to byte array, ensuring unsigned representation
+		byte[] bytes = hex.toByteArray();
+
+		// Remove leading zero byte if present
+		if (bytes[0] == 0) {
+			bytes = Arrays.copyOfRange(bytes, 1, bytes.length);
+		}
+
+		StringBuilder ascii = new StringBuilder();
+		for (byte b : bytes) {
+			ascii.append((char) (b & 0xFF));
+		}
+
+		String asciiStr = ascii.toString().trim();
+		String tagValue = "";
+
+		// Extract the tag value using regex
+		Pattern pattern = Pattern.compile("Tag:([A-Fa-f0-9]+)");
+		Matcher matcher = pattern.matcher(asciiStr);
+		if (matcher.find()) {
+			tagValue = matcher.group(1);
+		}
+
+		sensorsValue.put("rfidForWMS", tagValue);
+		LOGGER.info("RFID Tag Value: {}", tagValue);
 	}
 
 	private void processIODetailsForSensors() {
@@ -610,7 +638,7 @@ public class DeviceLogicHandler implements DeviceLogicHandlerBO {
 		if (hbio.length < 3)
 			return;
 
-		Date hbdeventTimeStamp = sdfTime.parse(hbio[2]);
+		Date hbdeventTimeStamp = TimeZoneUtil.sdfTime.parse(hbio[2]);
 
 		if (hbio.length > 5) {
 			vehicleDataJson.put("gps", hbio[1].equalsIgnoreCase("ON"));
@@ -1110,7 +1138,7 @@ public class DeviceLogicHandler implements DeviceLogicHandlerBO {
 			LOGGER.error("Error processing odometer event", e);
 		}
 	}
-	
+
 	/**
 	 * Get pre-odometer map - implementation would depend on how this is stored in
 	 * your application
@@ -1138,7 +1166,6 @@ public class DeviceLogicHandler implements DeviceLogicHandlerBO {
 		}
 	}
 
-
 	public static String hexStringToASCIIString(String hexCode) {
 		StringBuilder sb = new StringBuilder();
 		for (int i = 0; i < hexCode.length() - 1; i += 2) {
@@ -1149,6 +1176,7 @@ public class DeviceLogicHandler implements DeviceLogicHandlerBO {
 			sb.append((char) decimal);
 		}
 		return sb.toString();
+
 	}
 
 }

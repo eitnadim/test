@@ -22,6 +22,10 @@ public class VehicleService {
 	public Vehicle getActiveVehicleByImeiNo(String imei) {
 		return repo.findByVehicleDeviceImeiAndActive(imei, Boolean.TRUE);
 	}
+	
+	public Vehicle getActiveVehicleByVin(String vin) {
+		return repo.findByvinAndActive(vin, Boolean.TRUE);
+	}
 
 	public void saveVehicle(Vehicle vehicle) {
 		repo.save(vehicle);

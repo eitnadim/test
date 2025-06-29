@@ -76,5 +76,22 @@ public class CustomRepositoryImpl implements CustomRepository {
 
 		return (String) query.getSingleResult();
 	}
+	
+	@Override
+	public Object[] getTripDetails(String vin, String time, String rFID) {
+		java.sql.Time sqlTime = java.sql.Time.valueOf(time);
+		Query query = em.createQuery(GET_TRIP_DETAILS);
+		query.setParameter("vin", vin);
+		query.setParameter("time", sqlTime);
+		query.setParameter("rFID", rFID);
+		try {
+			return (Object[]) query.getSingleResult();
+		} catch (NoResultException e) {
+			LOGGER.error("No trip details found for VIN: {}, RFID: {}", vin, rFID);
+		} catch (NonUniqueResultException e) {
+			LOGGER.error("Multiple trip details found for VIN: {}, RFID: {}", vin, rFID);
+		}
+		return null;
+	}
 
 }

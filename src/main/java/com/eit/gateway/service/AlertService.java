@@ -663,8 +663,13 @@ public class AlertService {
 			// Check if this event meets the alert condition
 			boolean duration = false;
 
-			if (alertType == AlertType.TOWED || alertType == AlertType.IDLE || alertType == AlertType.STOP)
-				duration = isDurationReached(event, alertConfig);
+			if (alertType == AlertType.TOWED || alertType == AlertType.IDLE || alertType == AlertType.STOP) {
+				if (event.getStatus().equalsIgnoreCase(alertType.getAlertType())) {
+					duration = isDurationReached(event, alertConfig);
+				} else {
+					LOGGER.debug("Event status does not match alert type condition: " + alertType.getAlertType());
+				}
+			}
 
 			if (alertType.isAlertConditionMet(event, alertConfig, duration)) {
 
@@ -691,8 +696,9 @@ public class AlertService {
 			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 			long durationSeconds = customService.getLasteventDuration(event.getVin(),
 					sdf.parse(TimeZoneUtil.getDate(event.getEventTimestamp())));
-			
-			
+
+			LOGGER.debug("Duration in seconds for VIN {}: {}", event.getVin(), durationSeconds);
+
 			if (durationSeconds != 0) {
 				JSONObject alertConfigJson = new JSONObject(alertConfig.getAlertconfig());
 
@@ -701,8 +707,9 @@ public class AlertService {
 
 				boolean isDurationReached = durationSeconds >= interval;
 
-				LOGGER.debug("Duration calculated: {} seconds, {} minutes reached: {}", durationSeconds,
-						alertConfigJson.getString(alertConfig.getAlerttype().toLowerCase()), isDurationReached);
+				LOGGER.debug("Duration calculated: {} seconds, {} minutes reached: {} vin :{},alert:", durationSeconds,
+						alertConfigJson.getString(alertConfig.getAlerttype().toLowerCase()), isDurationReached,
+						event.getVin(), alertConfig.getAlerttype());
 
 				return isDurationReached;
 

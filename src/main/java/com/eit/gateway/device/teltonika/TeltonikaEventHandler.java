@@ -16,8 +16,7 @@ import com.eit.gateway.cache.CacheManager;
 import com.eit.gateway.dataservice.CustomService;
 import com.eit.gateway.dataservice.VehicleService;
 import com.eit.gateway.device.DeviceEventHandler;
-import com.eit.gateway.device.common.CommonDeviceParser;
-import com.eit.gateway.device.common.DeviceLogicHandlerBO;
+import com.eit.gateway.device.common.EventFactory;
 import com.eit.gateway.entity.CompanyTrackDevice;
 import com.eit.gateway.entity.VehicleEvent;
 import com.eit.gateway.exceptions.CloseDeviceConnectionException;
@@ -33,16 +32,10 @@ public class TeltonikaEventHandler extends DeviceEventHandler {
 	private static final Logger LOGGER = LoggerFactory.getLogger(TeltonikaEventHandler.class);
 
 	@Autowired
-	private VehicleService vehicleService;
+	EventFactory EventFactory;
 
 	@Autowired
-	private CustomService customService;
-
-	@Autowired
-	private CommonDeviceParser commonDeviceParser;
-
-	@Autowired
-	private DeviceLogicHandlerBO deviceLogicHandlerBO;
+	CommonUtils commonUtils;
 
 	public TeltonikaEventHandler() {
 		addCodecs();
@@ -60,7 +53,6 @@ public class TeltonikaEventHandler extends DeviceEventHandler {
 		try {
 
 			if (bytesRead > 0) {
-
 				getBuffer().flip();
 
 				// Comment or uncomment the below condition to stop or start sending socket data
@@ -86,7 +78,7 @@ public class TeltonikaEventHandler extends DeviceEventHandler {
 
 					getBuffer().get(bufferData, 0, getBuffer().limit());
 
-					setImeiNo(new String(bufferData, StandardCharsets.UTF_8));
+					setImeiNo(new String(bufferData, 2, (getBuffer().limit() - 2), StandardCharsets.UTF_8));
 
 					// Get the validated status
 					boolean status = CacheManager.isImeiNoExist(getImeiNo());
@@ -104,16 +96,20 @@ public class TeltonikaEventHandler extends DeviceEventHandler {
 
 					return;
 				}
-
+				int currentPosition = getBuffer().position();
+				LOGGER.info("Current position in buffer: {}", currentPosition);
+				setRawData(commonUtils.sendBufferToHexString(getBuffer(),getBuffer().remaining()));
+				getBuffer().position(currentPosition);
+				LOGGER.info("after buffer position: {}", getBuffer().position());
 				byte[] resonseMsg = null;
 
 				// Process the data with received buffer
 				resonseMsg = this.proces();
 
 				// Check if a response message to be sent to the device
-				if (resonseMsg != null)
-					sendToDevice(resonseMsg);
-
+//				if (resonseMsg != null)
+//					sendToDevice(resonseMsg);
+//
 			} else {
 				LOGGER.error("Connection lost with " + getDeviceDetails().getDeviceType() + " having IMEI number "
 						+ getImeiNo());
@@ -220,13 +216,17 @@ public class TeltonikaEventHandler extends DeviceEventHandler {
 					AvlData[] decoded = decoder.decode(data);
 					LOGGER.error("Inserting........");
 
+					byte[] length = CommonUtils.intToByteArray(decoded.length);
+					sendToDevice(length);
+
 					// Any exception while processing the message in the below method must be
 					// handled locally and shouldn't be thrown.
 					insertService(decoded, data.length);
 
 					// Regardless of the exception while processing the message, the length of the
 					// array must be sent to the device.
-					return CommonUtils.intToByteArray(decoded.length);
+//					return CommonUtils.intToByteArray(decoded.length);//NAdim
+					return length; // NAdim
 				}
 			}
 
@@ -241,17 +241,12 @@ public class TeltonikaEventHandler extends DeviceEventHandler {
 		return null;
 	}
 
-	private void loadVehicle() {
-
-		setVehicle(vehicleService.getActiveVehicleByImeiNo(getImeiNo()));
-	}
-
 	private void insertService(AvlData[] avlDataArray, long byteTrx) {
 
 		try {
 
 			// Must be true. Otherwise problem in database configuration.
-			loadVehicle();
+			setVehicle(commonUtils.loadVehicle(getImeiNo()));
 			LOGGER.info("Vehicle Data {}", getVehicle());
 
 			if (getVehicle() == null) {
@@ -259,21 +254,12 @@ public class TeltonikaEventHandler extends DeviceEventHandler {
 				return;
 			}
 
-			CompanyTrackDevice companyTrackDevice = customService.getCompanyTrackDevice(getVehicle().getVin());
+			CompanyTrackDevice companyTrackDevice = commonUtils.loadCompanyTrackDevice(getVehicle().getVin());
 
-			if (companyTrackDevice == null) {
+			if (companyTrackDevice == null)
 				LOGGER.info("NUll in CompanyTrackDevice :::{}", getVehicle().getVin());
-			} else {
-				VehicleEvent vehicleEvent = deviceLogicHandlerBO.prepareVehicleEvents(getVehicle(), avlDataArray,
-						byteTrx, companyTrackDevice);
-
-				if (vehicleEvent != null) {
-					// This call returns immediately - calling thread doesn't wait
-					commonDeviceParser.persistVehicleDataAsync(vehicleEvent, getVehicle(), companyTrackDevice);
-					LOGGER.error("Submitted vehicle event for async processing: {}", vehicleEvent.getVin());
-				} else {
-					LOGGER.warn("No vehicle events to process for IMEI: {}", getImeiNo());
-				}
+			else {
+				EventFactory.TelematicsEventFactory(getVehicle(), avlDataArray, byteTrx, companyTrackDevice,getRawData());
 			}
 
 		} catch (Exception e) {
@@ -291,4 +277,5 @@ public class TeltonikaEventHandler extends DeviceEventHandler {
 					"Exception while sending data to the device[" + e.getMessage() + "]");
 		}
 	}
+
 }

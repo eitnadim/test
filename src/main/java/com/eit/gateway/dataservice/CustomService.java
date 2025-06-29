@@ -36,4 +36,8 @@ public class CustomService {
 	public String getOverspeedRange(String vin,String alerttype) {
 		return customRepo.getOverspeedRange(vin, alerttype);
 	}
+
+	public Object[] getTripDetails(String vin, String time,String rFID) {
+		return customRepo.getTripDetails(vin,time, rFID);
+	}
 }

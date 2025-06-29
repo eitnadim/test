@@ -10,17 +10,30 @@ import java.nio.ByteBuffer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import com.eit.gateway.dataservice.CustomService;
+import com.eit.gateway.dataservice.VehicleService;
+import com.eit.gateway.entity.CompanyTrackDevice;
+import com.eit.gateway.entity.Vehicle;
 
 /**
  * 
  */
 public class CommonUtils {
 
+	@Autowired
+	private VehicleService vehicleService;
+
+	@Autowired
+	CustomService customService;
+
 	private static final Logger LOGGER = LoggerFactory.getLogger(CommonUtils.class);
 
 	public static final byte[] SUCCESS = new byte[] { (byte) 0x01 };
 	public static final byte[] FAILURE = new byte[] { (byte) 0x00 };
-	
+
 	public static byte[] wrap(byte[] data) {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 		DataOutputStream dos = new DataOutputStream(baos);
@@ -61,7 +74,7 @@ public class CommonUtils {
 
 		return crc & 0xFFFF;
 	}
-	
+
 	public static String decimalByteArrayToHexDecimalByteArray(byte[] byteArray) {
 		LOGGER.trace("Converting byte array of length {} to hex string", byteArray.length);
 		StringBuilder pp1 = new StringBuilder("");
@@ -85,58 +98,82 @@ public class CommonUtils {
 	}
 
 	public static int bytesToInt(byte[] bytes, boolean bigEndian) {
-        ByteBuffer buffer = ByteBuffer.wrap(bytes);
-        if (bigEndian) {
-          buffer.order(java.nio.ByteOrder.BIG_ENDIAN);
-        } else {
-          buffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
-        }
-        return buffer.getInt();
-    }
-	
+		ByteBuffer buffer = ByteBuffer.wrap(bytes);
+		if (bigEndian) {
+			buffer.order(java.nio.ByteOrder.BIG_ENDIAN);
+		} else {
+			buffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
+		}
+		return buffer.getInt();
+	}
+
 	public static byte[] intToByteArray(int value) {
-        byte[] byteArray = new byte[4];
-        byteArray[0] = (byte) (value >> 24);
-        byteArray[1] = (byte) (value >> 16);
-        byteArray[2] = (byte) (value >> 8);
-        byteArray[3] = (byte) (value);
-        return byteArray;
-    }
+		byte[] byteArray = new byte[4];
+		byteArray[0] = (byte) (value >> 24);
+		byteArray[1] = (byte) (value >> 16);
+		byteArray[2] = (byte) (value >> 8);
+		byteArray[3] = (byte) (value);
+		return byteArray;
+	}
 
 	public static ByteBuffer prependByteArray(byte[] existingBytes, ByteBuffer receivedByteBuffer) {
-        int headerSize = existingBytes.length;
-        int receivedDataSize = receivedByteBuffer.remaining();
-        ByteBuffer buffer = ByteBuffer.allocate(headerSize + receivedDataSize);
+		int headerSize = existingBytes.length;
+		int receivedDataSize = receivedByteBuffer.remaining();
+		ByteBuffer buffer = ByteBuffer.allocate(headerSize + receivedDataSize);
 
-        buffer.put(existingBytes);
-        buffer.put(receivedByteBuffer);
-        buffer.flip();
+		buffer.put(existingBytes);
+		buffer.put(receivedByteBuffer);
+		buffer.flip();
 
-        return buffer;
-    }
-	
+		return buffer;
+	}
+
 	public static ByteBuffer getByteBuffer(byte[] existingBytes, byte[] receivedBytes, int count) {
-		
+
 		byte[] dataCopy = new byte[count];
 		System.arraycopy(receivedBytes, 0, dataCopy, 0, count);
-		
-        ByteBuffer buffer = ByteBuffer.wrap(new byte[existingBytes.length + dataCopy.length]);
 
-        buffer.put(existingBytes);
-        buffer.put(dataCopy);
-        buffer.flip();
+		ByteBuffer buffer = ByteBuffer.wrap(new byte[existingBytes.length + dataCopy.length]);
 
-        return buffer;
-    }
-	
+		buffer.put(existingBytes);
+		buffer.put(dataCopy);
+		buffer.flip();
+
+		return buffer;
+	}
+
 	public static ByteBuffer getByteBuffer(byte[] receivedBytes, int count) {
 		byte[] dataCopy = new byte[count];
 		System.arraycopy(receivedBytes, 0, dataCopy, 0, count);
-        ByteBuffer buffer = ByteBuffer.wrap(new byte[dataCopy.length]);
+		ByteBuffer buffer = ByteBuffer.wrap(new byte[dataCopy.length]);
 
-        buffer.put(dataCopy);
-        buffer.flip();
+		buffer.put(dataCopy);
+		buffer.flip();
 
-        return buffer;
-    }
+		return buffer;
+	}
+
+	public Vehicle loadVehicle(String imeiNo) {
+
+		return vehicleService.getActiveVehicleByImeiNo(imeiNo);
+	}
+
+	public CompanyTrackDevice loadCompanyTrackDevice(String vin) {
+
+		return customService.getCompanyTrackDevice(vin);
+
+	}
+
+	public String sendBufferToHexString(ByteBuffer buffer, int remaining) {
+
+		byte[] dataArray = new byte[remaining];
+		buffer.get(dataArray);
+		LOGGER.info("buffer position: {}", buffer.position());
+		String hex = decimalByteArrayToHexDecimalByteArray(dataArray);
+
+		LOGGER.info("Data read from buffer: {}", hex);
+
+		return hex;
+
+	}
 }

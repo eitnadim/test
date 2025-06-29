@@ -56,5 +56,9 @@ public interface CustomRepository {
 
 	String GET_OVERSPEED_CONFIG_RANGE = "SELECT ac.alertconfig FROM AlertConfig ac WHERE ac.vin = :vin AND ac.alerttype = :alertType";
 	public String getOverspeedRange(String vin, String alertType);
+	
+	
+	String GET_TRIP_DETAILS = "select tr,sd from TripDetails tr inner join StopDetails sd ON sd.routeId=tr.routeId where tr.vin=:vin and :time BETWEEN tr.startTime and tr.endTime and sd.rfid=:rFID  ";
+	public Object[] getTripDetails(String vin,String time, String rFID);
 
 }

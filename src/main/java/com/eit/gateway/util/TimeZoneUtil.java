@@ -22,6 +22,11 @@ public class TimeZoneUtil {
 
 
 	private static Logger LOGGER = LoggerFactory.getLogger(TimeZoneUtil.class);
+	
+	private static final String DATE_DDHHMMSS = "yyyy-MM-dd HH:mm:ss";
+
+	public static final SimpleDateFormat sdfTime = new SimpleDateFormat(DATE_DDHHMMSS);
+	public static final SimpleDateFormat sdfDate = new SimpleDateFormat("yyyy-MM-dd");
 
 	/*
 	public static void main(String[] args) {
@@ -675,6 +680,24 @@ public class TimeZoneUtil {
 
 	        return mbCal.getTime();
 	    }
+	 
+	 public static String formatIntoHHMMSSWithOutDay(int seconds) {
+			int hours = seconds / 3600;
+			int minutes = (seconds % 3600) / 60;
+			int secs = seconds % 60;
+
+			return String.format("%02d:%02d:%02d", hours, minutes, secs);
+		}
+
+		/**
+		 * Format seconds into HH:MM format without day
+		 */
+	public static String formatIntoHHMMWithOutDay(int seconds) {
+			int hours = seconds / 3600;
+			int minutes = (seconds % 3600) / 60;
+
+			return String.format("%02d:%02d", hours, minutes);
+		}
 
 
 }

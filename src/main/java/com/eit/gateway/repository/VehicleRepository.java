@@ -16,4 +16,6 @@ import com.eit.gateway.entity.Vehicle;
 public interface VehicleRepository extends JpaRepository<Vehicle, String> {
 	
 	public Vehicle findByVehicleDeviceImeiAndActive(String imei, Boolean active);
+
+	public Vehicle findByvinAndActive(String vin, Boolean true1);
 }

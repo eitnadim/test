@@ -21,6 +21,7 @@ public abstract class DeviceEventHandler implements CompletionHandler<Integer, V
 	private DeviceDetails deviceDetails;
 	private AsynchronousSocketChannel asyncSocketChannel;
 	private ByteBuffer buffer;
+	private String rawData;
 
 	private Map<Byte, Object> codecObjects = new HashMap<Byte, Object>();
 
@@ -49,7 +50,6 @@ public abstract class DeviceEventHandler implements CompletionHandler<Integer, V
 	public void setMapKey(String mapKey) {
 		this.mapKey = mapKey;
 	}
-
 
 	public DeviceDetails getDeviceDetails() {
 		return deviceDetails;
@@ -84,6 +84,14 @@ public abstract class DeviceEventHandler implements CompletionHandler<Integer, V
 	 */
 	public Map<Byte, Object> getCodecObjects() {
 		return codecObjects;
+	}
+
+	public String getRawData() {
+		return rawData;
+	}
+
+	public void setRawData(String rawData) {
+		this.rawData = rawData;
 	}
 
 	/**
